@@ -1,0 +1,737 @@
+basePath: /api/v1
+definitions:
+  handlers.AuthResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  handlers.CreateHotelRequest:
+    properties:
+      address:
+        example: Jl. MH Thamrin No. 1
+        type: string
+      city:
+        example: Jakarta
+        type: string
+      description:
+        example: Hotel bintang 5 di pusat Jakarta
+        type: string
+      image:
+        example: https://example.com/hotel.jpg
+        type: string
+      name:
+        example: Grand Hotel Jakarta
+        type: string
+    required:
+    - address
+    - city
+    - description
+    - name
+    type: object
+  handlers.CreateRoomRequest:
+    properties:
+      capacity:
+        example: 2
+        minimum: 1
+        type: integer
+      description:
+        example: Kamar mewah dengan pemandangan kota
+        type: string
+      hotel_id:
+        example: 60e6f3a89f48e1a8e8a8b123
+        type: string
+      image:
+        example: https://example.com/room.jpg
+        type: string
+      name:
+        example: Deluxe Room
+        type: string
+    required:
+    - capacity
+    - description
+    - hotel_id
+    - name
+    type: object
+  handlers.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  handlers.RegisterRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        minLength: 6
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
+  handlers.RoomAvailabilityRequest:
+    properties:
+      available:
+        example: true
+        type: boolean
+      from_date:
+        description: Format YYYY-MM-DD
+        example: "2025-06-01"
+        type: string
+      room_id:
+        example: 60e6f3a89f48e1a8e8a8b124
+        type: string
+      to_date:
+        description: Format YYYY-MM-DD
+        example: "2025-06-10"
+        type: string
+      user_ids:
+        description: Opsional, jika tidak diisi semua user bisa memesan
+        example:
+        - '[''60e6f3a89f48e1a8e8a8b125'''
+        - ' ''60e6f3a89f48e1a8e8a8b126'']'
+        items:
+          type: string
+        type: array
+    required:
+    - from_date
+    - room_id
+    - to_date
+    type: object
+  handlers.SpecialDateRequest:
+    properties:
+      date:
+        description: Format YYYY-MM-DD
+        example: "2025-12-25"
+        type: string
+      name:
+        example: Hari Natal
+        type: string
+      point_cost:
+        example: 3
+        maximum: 3
+        minimum: 1
+        type: integer
+      type:
+        description: '"regular", "weekend", "holiday"'
+        example: holiday
+        type: string
+    required:
+    - date
+    - point_cost
+    - type
+    type: object
+  handlers.UpdateHotelRequest:
+    properties:
+      address:
+        example: Updated address
+        type: string
+      city:
+        example: Updated city
+        type: string
+      description:
+        example: Updated description
+        type: string
+      image:
+        example: https://example.com/new-image.jpg
+        type: string
+      name:
+        example: New Hotel Name
+        type: string
+    type: object
+  handlers.UpdateRoomRequest:
+    properties:
+      capacity:
+        example: 4
+        type: integer
+      description:
+        example: Updated room description
+        type: string
+      hotel_id:
+        example: 60e6f3a89f48e1a8e8a8b123
+        type: string
+      image:
+        example: https://example.com/new-room.jpg
+        type: string
+      name:
+        example: Superior Room
+        type: string
+    type: object
+  utils.APIErrorResponse:
+    properties:
+      error:
+        example: Invalid input parameter
+        type: string
+      status:
+        example: error
+        type: string
+    type: object
+  utils.APISuccessResponse:
+    properties:
+      data: {}
+      message:
+        example: Operation successful
+        type: string
+      status:
+        example: success
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+    url: http://www.example.com/support
+  description: API untuk aplikasi pemesanan hotel berbasis point
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Hotel Point API
+  version: "1.0"
+paths:
+  /admin/dates/special:
+    get:
+      description: Get special dates for a date range (admin only)
+      parameters:
+      - description: From Date (YYYY-MM-DD)
+        in: query
+        name: from_date
+        required: true
+        type: string
+      - description: To Date (YYYY-MM-DD)
+        in: query
+        name: to_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get special dates
+      tags:
+      - admin-dates
+    post:
+      consumes:
+      - application/json
+      description: Set a special date with custom point cost (admin only)
+      parameters:
+      - description: Special Date Information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SpecialDateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set special date
+      tags:
+      - admin-dates
+  /admin/dates/special/{id}:
+    delete:
+      description: Delete a special date (admin only)
+      parameters:
+      - description: Date Rule ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete special date
+      tags:
+      - admin-dates
+  /admin/hotels:
+    post:
+      consumes:
+      - application/json
+      description: Create a new hotel (admin only)
+      parameters:
+      - description: Hotel Information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateHotelRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new hotel
+      tags:
+      - admin-hotels
+  /admin/hotels/{id}:
+    delete:
+      description: Delete a hotel (admin only)
+      parameters:
+      - description: Hotel ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a hotel
+      tags:
+      - admin-hotels
+    put:
+      consumes:
+      - application/json
+      description: Update hotel information (admin only)
+      parameters:
+      - description: Hotel ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Hotel Information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateHotelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a hotel
+      tags:
+      - admin-hotels
+  /admin/rooms:
+    post:
+      consumes:
+      - application/json
+      description: Create a new room in a hotel (admin only)
+      parameters:
+      - description: Room Information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new room
+      tags:
+      - admin-rooms
+  /admin/rooms/{id}:
+    delete:
+      description: Delete a room (admin only)
+      parameters:
+      - description: Room ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a room
+      tags:
+      - admin-rooms
+    put:
+      consumes:
+      - application/json
+      description: Update room information (admin only)
+      parameters:
+      - description: Room ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Room Information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a room
+      tags:
+      - admin-rooms
+  /admin/rooms/{id}/availability:
+    get:
+      description: Get room availability for a date range (admin only)
+      parameters:
+      - description: Room ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: From Date (YYYY-MM-DD)
+        in: query
+        name: from_date
+        required: true
+        type: string
+      - description: To Date (YYYY-MM-DD)
+        in: query
+        name: to_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get room availability
+      tags:
+      - admin-rooms
+  /admin/rooms/availability:
+    post:
+      consumes:
+      - application/json
+      description: Set room availability for a date range (admin only)
+      parameters:
+      - description: Room Availability Information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RoomAvailabilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set room availability
+      tags:
+      - admin-rooms
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate a user and return a JWT token
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      summary: Login user
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user and create a user account
+      parameters:
+      - description: User Registration Info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.APISuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIErrorResponse'
+      summary: Register a new user
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
