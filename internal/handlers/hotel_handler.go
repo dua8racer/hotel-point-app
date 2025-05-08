@@ -21,6 +21,16 @@ func NewHotelHandler(hotelService services.HotelService, authService services.Au
 	}
 }
 
+// GetHotels godoc
+// @Summary     Get hotels
+// @Description Get all hotels for the authenticated user
+// @Tags        hotels
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {array} models.Hotel
+// @Failure     401 {object} utils.APIErrorResponse
+// @Failure     500 {object} utils.APIErrorResponse
+// @Router      /hotels [get]
 func (h *HotelHandler) GetHotels(c *gin.Context) {
 	hotels, err := h.hotelService.GetAllHotels()
 	if err != nil {

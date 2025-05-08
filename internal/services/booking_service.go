@@ -149,14 +149,6 @@ type bookingService struct {
 	pointService PointService
 }
 
-// NewBookingService godoc
-// @Description Membuat instance BookingService baru
-// @Param bookingRepo repositories.BookingRepository
-// @Param userRepo repositories.UserRepository
-// @Param hotelRepo repositories.HotelRepository
-// @Param dateService DateService
-// @Param pointService PointService
-// @Return BookingService
 func NewBookingService(
 	bookingRepo repositories.BookingRepository,
 	userRepo repositories.UserRepository,

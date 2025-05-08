@@ -143,11 +143,6 @@ type bookingRepository struct {
 	db *mongo.Database
 }
 
-// NewBookingRepository godoc
-// @Summary Membuat repository baru
-// @Description Membuat instance BookingRepository baru
-// @Param db *mongo.Database - Koneksi database MongoDB
-// @Return BookingRepository - Repository untuk operasi pemesanan
 func NewBookingRepository(db *mongo.Database) BookingRepository {
 	return &bookingRepository{db: db}
 }

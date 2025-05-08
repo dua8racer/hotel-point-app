@@ -182,3 +182,72 @@ func main() {
 
 	log.Println("Server exiting")
 }
+
+// Dokumentasi API
+/*
+API Documentation
+
+Base URL: /api/v1
+
+Authentication:
+- Register: POST /auth/register
+  Body: { "name": "string", "email": "string", "password": "string" }
+
+- Login: POST /auth/login
+  Body: { "email": "string", "password": "string" }
+  Response: { "token": "string" }
+
+User:
+- Get Profile: GET /users/profile
+  Authorization: Bearer Token
+  Response: User object
+
+- Update Profile: PUT /users/profile
+  Authorization: Bearer Token
+  Body: { "name": "string" }
+  Response: Updated User object
+
+- Get Point Balance: GET /users/points
+  Authorization: Bearer Token
+  Response: { "point_balance": number }
+
+- Get Point History: GET /users/points/history
+  Authorization: Bearer Token
+  Response: { "transactions": [PointTransaction objects] }
+
+Hotels:
+- Get All Hotels: GET /hotels
+  Authorization: Bearer Token
+  Response: { "hotels": [Hotel objects] }
+
+- Get Hotel by ID: GET /hotels/:id
+  Authorization: Bearer Token
+  Response: Hotel object
+
+- Get Rooms by Hotel ID: GET /hotels/:id/rooms
+  Authorization: Bearer Token
+  Response: { "rooms": [Room objects] }
+
+- Get Room by ID: GET /hotels/:id/rooms/:roomId
+  Authorization: Bearer Token
+  Response: Room object
+
+Bookings:
+- Calculate Point Cost: POST /bookings/calculate
+  Authorization: Bearer Token
+  Body: { "room_id": "string", "check_in": "YYYY-MM-DD", "check_out": "YYYY-MM-DD" }
+  Response: { "point_cost": number }
+
+- Create Booking: POST /bookings
+  Authorization: Bearer Token
+  Body: { "hotel_id": "string", "room_id": "string", "check_in": "YYYY-MM-DD", "check_out": "YYYY-MM-DD" }
+  Response: { "message": "Booking created successfully" }
+
+- Get User Bookings: GET /bookings
+  Authorization: Bearer Token
+  Response: { "bookings": [Booking objects] }
+
+- Get Booking by ID: GET /bookings/:id
+  Authorization: Bearer Token
+  Response: Booking object
+*/

@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
+	"hotel-point-app/internal/models"
 	"hotel-point-app/internal/services"
+	"hotel-point-app/pkg/utils"
 )
 
 // BookingHandler menangani operasi terkait pemesanan
@@ -32,50 +34,89 @@ type CalculatePointCostRequest struct {
 	CheckOut string `json:"check_out" binding:"required" example:"2025-06-05"` // Format YYYY-MM-DD
 }
 
+// CalculatePointCostResponse adalah response untuk hasil perhitungan biaya point
+type CalculatePointCostResponse struct {
+	PointCost    int              `json:"point_cost"`
+	DailyDetails []DailyPointCost `json:"daily_details,omitempty"`
+}
+
+// DailyPointCost adalah detail biaya point per hari
+type DailyPointCost struct {
+	Date      string `json:"date"`     // Format YYYY-MM-DD
+	DayType   string `json:"day_type"` // "regular", "weekend", "holiday"
+	PointCost int    `json:"point_cost"`
+	Name      string `json:"name,omitempty"` // Nama hari libur jika ada
+}
+
 // CalculatePointCost godoc
 // @Summary     Calculate booking point cost
-// @Description Calculate the point cost for a room booking during specified dates
+// @Description Calculate the point cost for a booking
 // @Tags        bookings
 // @Accept      json
 // @Produce     json
 // @Security    BearerAuth
-// @Param       request body CalculatePointCostRequest true "Calculation Parameters"
-// @Success     200 {object} map[string]int "Point cost calculation"
-// @Failure     400 {object} map[string]string "Error message"
-// @Failure     401 {object} map[string]string "Unauthorized"
+// @Param       request body CalculatePointCostRequest true "Booking Information"
+// @Success     200 {object} CalculatePointCostResponse
+// @Failure     400 {object} utils.APIErrorResponse
+// @Failure     401 {object} utils.APIErrorResponse
+// @Failure     404 {object} utils.APIErrorResponse
+// @Failure     500 {object} utils.APIErrorResponse
 // @Router      /bookings/calculate [post]
 func (h *BookingHandler) CalculatePointCost(c *gin.Context) {
 	var req CalculatePointCostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.SendErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	// Convert room ID
 	roomID, err := primitive.ObjectIDFromHex(req.RoomID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid room ID"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid room ID format")
 		return
 	}
 
+	// Parse tanggal
 	checkIn, err := time.Parse("2006-01-02", req.CheckIn)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid check-in date format"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid check_in format, use YYYY-MM-DD")
 		return
 	}
 
 	checkOut, err := time.Parse("2006-01-02", req.CheckOut)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid check-out date format"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid check_out format, use YYYY-MM-DD")
 		return
 	}
 
-	pointCost, err := h.bookingService.CalculatePointCost(roomID, checkIn, checkOut)
+	// Hitung biaya point
+	pointCost, dailyPoints, err := h.bookingService.CalculatePointCostWithDetails(roomID, checkIn, checkOut)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if err.Error() == "room not found" {
+			utils.SendErrorResponse(c, http.StatusNotFound, "Room not found")
+			return
+		}
+		utils.SendErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"point_cost": pointCost})
+	// Format daily details for response
+	var dailyDetails []DailyPointCost
+	for _, dp := range dailyPoints {
+		dailyDetails = append(dailyDetails, DailyPointCost{
+			Date:      dp.Date.Format("2006-01-02"),
+			DayType:   dp.DayType,
+			PointCost: dp.PointCost,
+			Name:      dp.Name,
+		})
+	}
+
+	response := CalculatePointCostResponse{
+		PointCost:    pointCost,
+		DailyDetails: dailyDetails,
+	}
+
+	utils.SendSuccessResponse(c, http.StatusOK, "Point cost calculated successfully", response)
 }
 
 // CreateBookingRequest adalah request body untuk membuat pemesanan
@@ -94,51 +135,80 @@ type CreateBookingRequest struct {
 // @Produce     json
 // @Security    BearerAuth
 // @Param       request body CreateBookingRequest true "Booking Information"
-// @Success     201 {object} map[string]string "Success message"
-// @Failure     400 {object} map[string]string "Error message"
-// @Failure     401 {object} map[string]string "Unauthorized"
-// @Failure     404 {object} map[string]string "Not found"
+// @Success     201 {object} models.Booking
+// @Failure     400 {object} utils.APIErrorResponse
+// @Failure     401 {object} utils.APIErrorResponse
+// @Failure     404 {object} utils.APIErrorResponse
+// @Failure     500 {object} utils.APIErrorResponse
 // @Router      /bookings [post]
 func (h *BookingHandler) CreateBooking(c *gin.Context) {
 	var req CreateBookingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.SendErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	userID := c.MustGet("userID").(primitive.ObjectID)
+	// Get user ID from context
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.SendErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	// Convert IDs
+	userObjID := userID.(primitive.ObjectID)
 
 	hotelID, err := primitive.ObjectIDFromHex(req.HotelID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid hotel ID"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid hotel ID format")
 		return
 	}
 
 	roomID, err := primitive.ObjectIDFromHex(req.RoomID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid room ID"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid room ID format")
 		return
 	}
 
+	// Parse tanggal
 	checkIn, err := time.Parse("2006-01-02", req.CheckIn)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid check-in date format"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid check_in format, use YYYY-MM-DD")
 		return
 	}
 
 	checkOut, err := time.Parse("2006-01-02", req.CheckOut)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid check-out date format"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid check_out format, use YYYY-MM-DD")
 		return
 	}
 
-	err = h.bookingService.CreateBooking(userID, hotelID, roomID, checkIn, checkOut)
+	// Create booking
+	booking, err := h.bookingService.CreateBooking(userObjID, hotelID, roomID, checkIn, checkOut)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		statusCode := http.StatusInternalServerError
+
+		// Handle specific errors
+		switch err.Error() {
+		case "room not found":
+			statusCode = http.StatusNotFound
+		case "hotel not found":
+			statusCode = http.StatusNotFound
+		case "insufficient point balance":
+			statusCode = http.StatusBadRequest
+		case "room is not available for the selected dates":
+			statusCode = http.StatusBadRequest
+		case "check-in date cannot be after check-out date":
+			statusCode = http.StatusBadRequest
+		case "check-in date cannot be in the past":
+			statusCode = http.StatusBadRequest
+		}
+
+		utils.SendErrorResponse(c, statusCode, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Booking created successfully"})
+	utils.SendSuccessResponse(c, http.StatusCreated, "Booking created successfully", booking)
 }
 
 // GetBookings godoc
@@ -147,76 +217,111 @@ func (h *BookingHandler) CreateBooking(c *gin.Context) {
 // @Tags        bookings
 // @Produce     json
 // @Security    BearerAuth
-// @Success     200 {object} map[string]interface{} "List of bookings"
-// @Failure     401 {object} map[string]string "Unauthorized"
-// @Failure     500 {object} map[string]string "Server error"
+// @Success     200 {array} models.Booking
+// @Failure     401 {object} utils.APIErrorResponse
+// @Failure     500 {object} utils.APIErrorResponse
 // @Router      /bookings [get]
 func (h *BookingHandler) GetBookings(c *gin.Context) {
-	userID := c.MustGet("userID").(primitive.ObjectID)
-
-	bookings, err := h.bookingService.GetUserBookings(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Get user ID from context
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.SendErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"bookings": bookings})
+	// Get bookings
+	bookings, err := h.bookingService.GetUserBookings(userID.(primitive.ObjectID))
+	if err != nil {
+		utils.SendErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.SendSuccessResponse(c, http.StatusOK, "Bookings retrieved successfully", bookings)
 }
 
 // GetBookingById godoc
 // @Summary     Get booking details
-// @Description Get details of a specific booking by ID
+// @Description Get a specific booking by ID
 // @Tags        bookings
 // @Produce     json
 // @Security    BearerAuth
-// @Param       id path string true "Booking ID" example:"60f1a5c29f48e1a8e8a8b124"
-// @Success     200 {object} interface{} "Booking details"
-// @Failure     400 {object} map[string]string "Invalid ID"
-// @Failure     401 {object} map[string]string "Unauthorized"
-// @Failure     404 {object} map[string]string "Not found"
+// @Param       id path string true "Booking ID"
+// @Success     200 {object} models.Booking
+// @Failure     400 {object} utils.APIErrorResponse
+// @Failure     401 {object} utils.APIErrorResponse
+// @Failure     404 {object} utils.APIErrorResponse
+// @Failure     500 {object} utils.APIErrorResponse
 // @Router      /bookings/{id} [get]
 func (h *BookingHandler) GetBookingById(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := primitive.ObjectIDFromHex(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking ID"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid booking ID format")
 		return
 	}
 
+	// Get booking
 	booking, err := h.bookingService.GetBookingByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Booking not found"})
+		if err.Error() == "booking not found" {
+			utils.SendErrorResponse(c, http.StatusNotFound, "Booking not found")
+			return
+		}
+		utils.SendErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, booking)
+	// Check if user has access to this booking
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.SendErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	// If user is not the owner of this booking, check if user has admin role
+	if booking.UserID != userID.(primitive.ObjectID) {
+		user, exists := c.Get("user")
+		if !exists {
+			utils.SendErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+			return
+		}
+
+		userObj, ok := user.(*models.User)
+		if !ok || userObj.Role != models.RoleAdmin {
+			utils.SendErrorResponse(c, http.StatusForbidden, "You don't have permission to view this booking")
+			return
+		}
+	}
+
+	utils.SendSuccessResponse(c, http.StatusOK, "Booking retrieved successfully", booking)
 }
 
-// CancelBookingRequest adalah request body untuk pembatalan pemesanan
+// CancelBookingRequest adalah request body untuk membatalkan pemesanan
 type CancelBookingRequest struct {
-	Reason string `json:"reason" example:"Perubahan rencana perjalanan"`
+	Reason string `json:"reason" example:"Change of plans"`
 }
 
 // CancelBooking godoc
-// @Summary     Cancel a booking
-// @Description Cancel an existing booking and refund points
+// @Summary     Cancel booking
+// @Description Cancel a booking and refund points
 // @Tags        bookings
 // @Accept      json
 // @Produce     json
 // @Security    BearerAuth
-// @Param       id path string true "Booking ID" example:"60f1a5c29f48e1a8e8a8b124"
+// @Param       id path string true "Booking ID"
 // @Param       request body CancelBookingRequest false "Cancellation Information"
-// @Success     200 {object} map[string]string "Success message"
-// @Failure     400 {object} map[string]string "Error message"
-// @Failure     401 {object} map[string]string "Unauthorized"
-// @Failure     403 {object} map[string]string "Forbidden"
-// @Failure     404 {object} map[string]string "Not found"
+// @Success     200 {object} utils.APISuccessResponse
+// @Failure     400 {object} utils.APIErrorResponse
+// @Failure     401 {object} utils.APIErrorResponse
+// @Failure     403 {object} utils.APIErrorResponse
+// @Failure     404 {object} utils.APIErrorResponse
+// @Failure     500 {object} utils.APIErrorResponse
 // @Router      /bookings/{id}/cancel [post]
 func (h *BookingHandler) CancelBooking(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := primitive.ObjectIDFromHex(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking ID"})
+		utils.SendErrorResponse(c, http.StatusBadRequest, "Invalid booking ID format")
 		return
 	}
 
@@ -225,49 +330,63 @@ func (h *BookingHandler) CancelBooking(c *gin.Context) {
 		// Ignore binding errors for this field as it's optional
 	}
 
-	userID := c.MustGet("userID").(primitive.ObjectID)
-
-	// Pembatalan pemesanan
-	err = h.bookingService.CancelBooking(id, userID)
-	if err != nil {
-		// Determine status code based on error
-		statusCode := http.StatusInternalServerError
-
-		if err.Error() == "booking not found" {
-			statusCode = http.StatusNotFound
-		} else if err.Error() == "unauthorized to cancel this booking" {
-			statusCode = http.StatusForbidden
-		} else if err.Error() == "booking already cancelled" ||
-			err.Error() == "booking already completed" ||
-			err.Error() == "cannot cancel booking within 24 hours of check-in" {
-			statusCode = http.StatusBadRequest
-		}
-
-		c.JSON(statusCode, gin.H{"error": err.Error()})
+	// Get user ID from context
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.SendErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Booking cancelled successfully"})
+	// Cancel booking
+	err = h.bookingService.CancelBooking(id, userID.(primitive.ObjectID))
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+
+		// Handle specific errors
+		switch err.Error() {
+		case "booking not found":
+			statusCode = http.StatusNotFound
+		case "booking already cancelled":
+			statusCode = http.StatusBadRequest
+		case "booking already completed":
+			statusCode = http.StatusBadRequest
+		case "unauthorized to cancel this booking":
+			statusCode = http.StatusForbidden
+		case "cannot cancel booking within 24 hours of check-in":
+			statusCode = http.StatusBadRequest
+		}
+
+		utils.SendErrorResponse(c, statusCode, err.Error())
+		return
+	}
+
+	utils.SendSuccessResponse(c, http.StatusOK, "Booking cancelled successfully", nil)
 }
 
 // GetActiveBookings godoc
 // @Summary     Get active bookings
-// @Description Get all active (upcoming) bookings for the current user
+// @Description Get all active (upcoming) bookings for the authenticated user
 // @Tags        bookings
 // @Produce     json
 // @Security    BearerAuth
-// @Success     200 {object} map[string]interface{} "List of active bookings"
-// @Failure     401 {object} map[string]string "Unauthorized"
-// @Failure     500 {object} map[string]string "Server error"
+// @Success     200 {array} models.Booking
+// @Failure     401 {object} utils.APIErrorResponse
+// @Failure     500 {object} utils.APIErrorResponse
 // @Router      /bookings/active [get]
 func (h *BookingHandler) GetActiveBookings(c *gin.Context) {
-	userID := c.MustGet("userID").(primitive.ObjectID)
-
-	bookings, err := h.bookingService.GetActiveBookingsByUser(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Get user ID from context
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.SendErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"bookings": bookings})
+	// Get active bookings
+	bookings, err := h.bookingService.GetActiveBookingsByUser(userID.(primitive.ObjectID))
+	if err != nil {
+		utils.SendErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.SendSuccessResponse(c, http.StatusOK, "Active bookings retrieved successfully", bookings)
 }
